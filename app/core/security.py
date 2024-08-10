@@ -3,6 +3,11 @@ import os
 import zipfile
 from fastapi import HTTPException
 from bson import ObjectId
+from cryptography.fernet import Fernet
+
+def encrypt_file(file_contents: bytes, key: bytes) -> bytes:
+    fernet = Fernet(key)
+    return fernet.encrypt(file_contents)
 def encrypt_files(file_ids, db):
     key = Fernet.generate_key()
     fernet = Fernet(key)

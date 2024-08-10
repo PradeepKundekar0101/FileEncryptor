@@ -1,11 +1,9 @@
 from fastapi import FastAPI
-from app.routes import file, encryption
+from app.routes import file
 
 app = FastAPI()
 
 app.include_router(file.router)
-app.include_router(encryption.router)
-
 
 if __name__ == "__main__":
     import uvicorn
