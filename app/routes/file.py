@@ -16,6 +16,7 @@ from app.services.auth import get_current_user
 from app.services.email import send_email
 from app.services.exe_generator import generate_exe
 from app.models.group import Group, FileInfo
+import requests
 
 router = APIRouter()
 
@@ -27,7 +28,6 @@ try:
     container_client.get_container_properties()
 except ResourceNotFoundError:
     container_client = blob_service_client.create_container(container_name)
-
 
 @router.post("/upload_and_encrypt/")
 async def upload_and_encrypt_files(
@@ -79,34 +79,23 @@ async def upload_and_encrypt_files(
 
         # Encrypt files
         try:
-            print("file_infos")
-            print(file_infos)
             encrypted_file_paths, key, file_extensions = encrypt_files([f.fileId for f in file_infos], db)
         except Exception as e:
             print(f"Error during file encryption: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Error during file encryption: {str(e)}")
 
-       # Generate executables
+        # Generate executables
         try:
-            exe_paths = generate_exe(key, encrypted_file_paths, file_extensions, current_user['email'], group_name)
+            zip_path = generate_exe(key, encrypted_file_paths, file_extensions, current_user['email'], group_name)
         except Exception as e:
             print(f"Error generating executables: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Error generating executables: {str(e)}")
 
-        # Create and upload ZIP file
         try:
-            zip_id = str(ObjectId())
-            zip_path = f"temp/{zip_id}.zip"
-            with zipfile.ZipFile(zip_path, 'w') as zipf:
-                for file_path in encrypted_file_paths:
-                    zipf.write(file_path, os.path.basename(file_path))
-                for exe_path in exe_paths:
-                    zipf.write(exe_path, os.path.basename(exe_path))
-
-
+            zip_id = f"{str(ObjectId())}.zip"  # Ensure the file has a .zip extension
             zip_blob_client = container_client.get_blob_client(blob=zip_id)
             with open(zip_path, "rb") as zip_file:
-                zip_blob_client.upload_blob(zip_file.read(), blob_type="BlockBlob")
+                zip_blob_client.upload_blob(zip_file.read(), blob_type="BlockBlob", content_settings={"content_type": "application/zip"})
 
             zip_sas_token = generate_blob_sas(
                 account_name=blob_service_client.account_name,
@@ -116,11 +105,10 @@ async def upload_and_encrypt_files(
                 permission=BlobSasPermissions(read=True),
                 expiry=datetime.datetime.utcnow() + datetime.timedelta(hours=1)
             )
-
             zip_url_with_sas = f"{zip_blob_client.url}?{zip_sas_token}"
         except Exception as e:
-            print(f"Error creating or uploading ZIP file: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"Error creating or uploading ZIP file: {str(e)}")
+            print(f"Error uploading ZIP file: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Error uploading ZIP file: {str(e)}")
 
         try:
             new_group = Group(
@@ -136,13 +124,9 @@ async def upload_and_encrypt_files(
             raise HTTPException(status_code=500, detail=f"Error creating group in database: {str(e)}")
 
         # Clean up temporary files
+        os.remove(zip_path)
         for file_path in encrypted_file_paths:
-            if os.path.exists(file_path):
-                os.remove(file_path)
-        if os.path.exists(zip_path):
-            os.remove(zip_path)
-        if os.path.exists(exe_path):
-            os.remove(exe_path)
+            os.remove(file_path)
 
         return {
             "message": "Files uploaded and encrypted successfully",

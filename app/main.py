@@ -1,8 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import auth, file
-
+from app.routes import auth, file,notification
 
 app = FastAPI()
 
@@ -17,6 +16,7 @@ app.add_middleware(
 
 app.include_router(file.router)
 app.include_router(auth.router)
+app.include_router(notification.router)
 
 if __name__ == "__main__":
     import uvicorn

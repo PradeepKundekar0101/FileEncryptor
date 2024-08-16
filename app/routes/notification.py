@@ -11,9 +11,7 @@ from app.services.auth import get_current_user
 router = APIRouter()
 @router.get("/notifications/")
 async def get_user_notifications(current_user: dict = Depends(get_current_user), db: Any = Depends(get_db)):
-    """
-    Returns a list of notifications for the current user.
-    """
+  
     try:
         notifications = list(db.notifications.find({"user": current_user['email']}))
         return {"notifications": [Notification(**notification).dict() for notification in notifications]}
@@ -26,9 +24,7 @@ async def mark_notification_as_read(
     current_user: dict = Depends(get_current_user),
     db: Any = Depends(get_db)
 ):
-    """
-    Marks a notification as read.
-    """
+   
     try:
         result = db.notifications.update_one(
             {"_id": ObjectId(notification_id), "user": current_user['email']},
