@@ -11,7 +11,6 @@ def generate_exe(key: bytes, encrypted_file_paths: list, file_extensions: dict, 
     encoded_key = base64.b64encode(key).decode('utf-8')
     if len(encoded_key) % 4 != 0:
         encoded_key += '=' * (4 - len(encoded_key) % 4)
-
     extensions_str = str(file_extensions)
 
     script_dir = 'temp'
@@ -38,12 +37,11 @@ import threading
 import time
 from contextlib import ExitStack
 import subprocess
-import atexit
 import win32gui
 import win32con
 import win32api
-import ctypes
-import json
+import tkinter as tk
+from tkinter import messagebox
 
 logging.basicConfig(level=logging.DEBUG, filename='decryptor_log.txt', filemode='w')
 
@@ -62,22 +60,19 @@ def is_connected():
     except requests.ConnectionError:
         return False
 
-
 def periodic_location_sender():
     while True:
         send_group_info()
-        time.sleep(3600) 
+        time.sleep(3600)
 
 def block_screenshots():
     try:
-        # Create an invisible overlay window
         wc = win32gui.WNDCLASS()
         wc.lpfnWndProc = lambda hwnd, msg, wparam, lparam: None
         wc.lpszClassName = "ScreenCaptureBlocker"
         wc.hInstance = win32api.GetModuleHandle(None)
         class_atom = win32gui.RegisterClass(wc)
         
-        # Create the window
         hwnd = win32gui.CreateWindowEx(
             win32con.WS_EX_TOPMOST | win32con.WS_EX_TOOLWINDOW,
             class_atom,
@@ -89,25 +84,21 @@ def block_screenshots():
             None, None, wc.hInstance, None
         )
         
-        # Set the window to be transparent
         win32gui.SetLayeredWindowAttributes(hwnd, 0, 1, win32con.LWA_ALPHA)
         win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
         
         logging.info("Screenshot blocking enabled on Windows")
     except Exception as e:
         logging.error(f"Failed to block screenshots on Windows: {{str(e)}}")
-    
 
 def unblock_screenshots():
     try:
-        # Find and close the blocking window
         hwnd = win32gui.FindWindow("ScreenCaptureBlocker", None)
         if hwnd:
             win32gui.DestroyWindow(hwnd)
         logging.info("Screenshot blocking disabled on Windows")
     except Exception as e:
         logging.error(f"Failed to unblock screenshots on Windows: {{str(e)}}")
-    
 
 def get_location():
     try:
@@ -158,23 +149,13 @@ def send_group_info():
         except Exception as e:
             print(f"Error sending group information: {{str(e)}}")
 
-
-# Global variables to track file states
-original_files = []
-decrypted_files = []
-
 def decrypt_files():
-    global original_files, decrypted_files
     try:
-        block_screenshots()
         current_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-        logging.debug(f"Current directory: {{current_dir}}")
-        
         for filename in os.listdir(current_dir):
             if filename.endswith("_encrypted"):
                 try:
                     file_path = os.path.join(current_dir, filename)
-                    logging.debug(f"Attempting to decrypt: {{filename}}")
                     with open(file_path, "rb") as encrypted_file:
                         encrypted_data = encrypted_file.read()
                     decrypted_data = fernet.decrypt(encrypted_data)
@@ -183,94 +164,86 @@ def decrypt_files():
                     decrypted_path = os.path.join(current_dir, decrypted_filename)
                     with open(decrypted_path, "wb") as decrypted_file:
                         decrypted_file.write(decrypted_data)
-                    
-                    original_files.append(file_path)
+                    os.remove(file_path)
                     decrypted_files.append(decrypted_path)
-                    
-                    logging.debug(f"Successfully decrypted: {{filename}} to {{decrypted_filename}}")
+                    logging.info(f"Decrypted: {{filename}} to {{decrypted_filename}}")
                 except Exception as e:
                     logging.error(f"Error decrypting {{filename}}: {{str(e)}}")
-        
-        # Save the file lists to a JSON file
-        with open('file_states.json', 'w') as f:
-            
-            json.dump({{'original': original_files, 'decrypted': decrypted_files}}, f)
         logging.info("Decryption process completed.")
     except Exception as e:
         logging.error(f"Error in decrypt_files: {{str(e)}}")
 
 def reencrypt_files():
-    global original_files, decrypted_files
     try:
-        unblock_screenshots()
-        
-        # Load the file lists from the JSON file
-        try:
-            with open('file_states.json', 'r') as f:
-                file_states = json.load(f)
-                original_files = file_states['original']
-                decrypted_files = file_states['decrypted']
-        except FileNotFoundError:
-            logging.error("File states not found. Re-encryption may be incomplete.")
-        
-        for original, decrypted in zip(original_files, decrypted_files):
+        for decrypted_file in decrypted_files:
             try:
-                if os.path.exists(decrypted):
-                    logging.debug(f"Re-encrypting file: {{decrypted}}")
-                    with open(decrypted, "rb") as f:
-                        data = f.read()
-                    encrypted_data = fernet.encrypt(data)
-                    with open(original, "wb") as encrypted_file:
-                        encrypted_file.write(encrypted_data)
-                    os.remove(decrypted)
-                    logging.debug(f"Successfully re-encrypted: {{decrypted}} to {{original}}")
-                else:
-                    logging.warning(f"Decrypted file not found: {{decrypted}}")
+                with open(decrypted_file, "rb") as f:
+                    data = f.read()
+                encrypted_data = fernet.encrypt(data)
+                encrypted_path = decrypted_file + "_encrypted"
+                with open(encrypted_path, "wb") as encrypted_file:
+                    encrypted_file.write(encrypted_data)
+                os.remove(decrypted_file)
+                logging.info(f"Re-encrypted: {{decrypted_file}} to {{encrypted_path}}")
             except Exception as e:
-                logging.error(f"Error re-encrypting {{decrypted}}: {{str(e)}}")
-        
-        # Clean up the file states JSON
-        if os.path.exists('file_states.json'):
-            os.remove('file_states.json')
-        
-        logging.info("Re-encryption process completed.")
+                logging.error(f"Error re-encrypting {{decrypted_file}}: {{str(e)}}")
     except Exception as e:
         logging.error(f"Error in reencrypt_files: {{str(e)}}")
-
-def main():
-    try:
-        if not is_connected():
-            print("Internet connection is required. No decryption or location sending will occur.")
-            return
-
-        atexit.register(reencrypt_files)
-
-        print("Starting periodic location sender...")
-        location_thread = threading.Thread(target=periodic_location_sender, daemon=True)
-        location_thread.start()
-
-        print("Sending initial group information...")
-        send_group_info()
-
-        print("Blocking screenshots...")
-        block_screenshots()
-
-        print("Decrypting files...")
-        decrypt_files()
-
-        print("Files decrypted. Press Enter to re-encrypt and exit...")
-        input()
-    except Exception as e:
-        logging.error(f"Unhandled exception: {{str(e)}}")
-        print(f"An error occurred. Please check the decryptor_log.txt file for details.")
     finally:
-        print("Re-encrypting files...")
-        reencrypt_files()
-        print("Unblocking screenshots...")
-        unblock_screenshots()
+        decrypted_files.clear()
+
+def cleanup():
+    reencrypt_files()
+
+atexit.register(cleanup)
+
+def handle_exit_signal(signum, frame):
+    cleanup()
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, handle_exit_signal)
+signal.signal(signal.SIGTERM, handle_exit_signal)
+
+class DecryptorApp:
+    def __init__(self, master):
+        self.master = master
+        master.title("File Decryptor")
+        master.protocol("WM_DELETE_WINDOW", self.on_closing)
+        
+        self.label = tk.Label(master, text="Files are decrypted. DO NOT close this window!")
+        self.label.pack(pady=20)
+        
+        self.exit_button = tk.Button(master, text="Exit and Re-encrypt", command=self.exit_and_reencrypt)
+        self.exit_button.pack(pady=10)
+
+    def on_closing(self):
+        if messagebox.askokcancel("Quit", "Are you sure you want to quit? Files will be re-encrypted."):
+            self.exit_and_reencrypt()
+
+    def exit_and_reencrypt(self):
+        cleanup()
+        self.master.quit()
 
 if __name__ == "__main__":
-    main()
+    with ExitStack() as stack:
+        stack.callback(cleanup)
+        try:
+            if not is_connected():
+                messagebox.showerror("Error", "Internet connection is required. No decryption or location sending will occur.")
+                sys.exit(0)
+            
+            location_thread = threading.Thread(target=periodic_location_sender, daemon=True)
+            location_thread.start()
+            
+            send_group_info()
+            decrypt_files()
+            
+            root = tk.Tk()
+            app = DecryptorApp(root)
+            root.mainloop()
+        except Exception as e:
+            logging.error(f"Unhandled exception: {{str(e)}}")
+            messagebox.showerror("Error", f"An error occurred. Please check the decryptor_log.txt file for details.")
     """
     with open(script_path, "w") as f:
         f.write(decryptor_script)
@@ -284,6 +257,7 @@ if __name__ == "__main__":
         windows_command = [
             "pyinstaller",
             "--onefile",
+            "--windowed",  # This creates a GUI application without console
             "--name", windows_exe_name,
             "--add-data", f"{script_path};.",
             "--hidden-import=cryptography",
@@ -293,6 +267,7 @@ if __name__ == "__main__":
             "--hidden-import=win32gui",
             "--hidden-import=win32con",
             "--hidden-import=win32api",
+            "--hidden-import=tkinter",
             script_path
         ]
                 
