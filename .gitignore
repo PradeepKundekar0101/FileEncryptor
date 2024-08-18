@@ -62,7 +62,6 @@ dmypy.json
 .venv/
 
 # Editor and IDE specific files
-.vscode/
 .idea/
 *.sublime-project
 *.sublime-workspace
@@ -72,3 +71,6 @@ dmypy.json
 .DS_Store
 
 temp
+temp_auto_push.bat
+temp_interactive_push.bat
+.gitignore

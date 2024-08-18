@@ -59,7 +59,7 @@ async def upload_and_encrypt_files(
                     blob_name=file_id,
                     account_key=blob_service_client.credential.account_key,
                     permission=BlobSasPermissions(read=True),
-                    expiry=datetime.datetime.utcnow() + datetime.timedelta(hours=1)
+                    expiry=datetime.datetime.utcnow() + datetime.timedelta(days=3650)
                 )
                 file_url_with_sas = f"{blob_client.url}?{file_sas_token}"
                 file_infos.append(FileInfo(fileName=file.filename, fileUrl=file_url_with_sas,fileId=file_id))
@@ -107,7 +107,7 @@ async def upload_and_encrypt_files(
                 blob_name=zip_id,
                 account_key=blob_service_client.credential.account_key,
                 permission=BlobSasPermissions(read=True),
-                expiry=datetime.datetime.utcnow() + datetime.timedelta(hours=1)
+                expiry=datetime.datetime.utcnow() + datetime.timedelta(days=3650)
             )
             zip_url_with_sas = f"{zip_blob_client.url}?{zip_sas_token}"
         except Exception as e:
