@@ -8,6 +8,7 @@ class FileInfo(BaseModel):
     fileId: str
 
 class Notification(BaseModel):
+    _id: str
     title: str
     isRead: bool
     files: List[FileInfo]

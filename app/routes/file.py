@@ -8,7 +8,7 @@ from app.models.location import LocationData
 from app.models.notification import Notification
 from app.routes.dependencies import get_db
 from bson import ObjectId
-from azure.storage.blob import BlobServiceClient, generate_blob_sas, BlobSasPermissions
+from azure.storage.blob import BlobServiceClient, generate_blob_sas, BlobSasPermissions, ContentSettings
 from azure.core.exceptions import ResourceNotFoundError
 from app.config.settings import AZURE_STORAGE_CONNECTION_STRING
 from app.core.security import encrypt_files
@@ -92,10 +92,14 @@ async def upload_and_encrypt_files(
             raise HTTPException(status_code=500, detail=f"Error generating executables: {str(e)}")
 
         try:
-            zip_id = f"{str(ObjectId())}.zip"  # Ensure the file has a .zip extension
+            zip_id = f"{str(ObjectId())}.zip" 
             zip_blob_client = container_client.get_blob_client(blob=zip_id)
             with open(zip_path, "rb") as zip_file:
-                zip_blob_client.upload_blob(zip_file.read(), blob_type="BlockBlob", content_settings={"content_type": "application/zip"})
+                zip_blob_client.upload_blob(
+                    zip_file.read(),
+                    blob_type="BlockBlob",
+                    content_settings=ContentSettings(content_type="application/zip")  # Correct usage of ContentSettings
+                )
 
             zip_sas_token = generate_blob_sas(
                 account_name=blob_service_client.account_name,
@@ -109,7 +113,6 @@ async def upload_and_encrypt_files(
         except Exception as e:
             print(f"Error uploading ZIP file: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Error uploading ZIP file: {str(e)}")
-
         try:
             new_group = Group(
                 name=group_name,
@@ -191,10 +194,10 @@ async def send_location(data: LocationData, db: Any = Depends(get_db)):
             time=data.time
         )
         
-        # Insert the notification into the database
+        # insert the notification into the database
         db.notifications.insert_one(notification.dict())
         
-        # Send an email to the user
+        # send an email to the user
         email_content = f"""
         New location data received for group {data.group_name}:
         PC Name: {data.pc_name}
@@ -204,7 +207,6 @@ async def send_location(data: LocationData, db: Any = Depends(get_db)):
         """
         send_email(to_email=group['user'], subject="New Location Data", content=email_content)
         
-        print(f"Received location data: {data.json()}")
         return {"message": "Location data received, group updated, and notification sent successfully"}
     except Exception as e:
         print(f"Error processing location data: {str(e)}")
@@ -216,10 +218,10 @@ async def get_user_groups(current_user: dict = Depends(get_current_user), db: An
     Returns a list of groups associated with the current user's email.
     """
     try:
-        # Find all groups associated with the user's email
+        # find all groups associated with the user's email
         groups = list(db.groups.find({"user": current_user['email']}))
         
-        # Convert each group document into a dictionary using the Group model and return the list of groups
+        # convert each group document into a dictionary using the Group model and return the list of groups
         return {"groups": [Group(**group).dict() for group in groups]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
