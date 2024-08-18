@@ -13,7 +13,7 @@ from app.services.auth import authenticate_user, create_access_token, get_passwo
 # Secret key to encode JWT
 SECRET_KEY = "1234"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 10000
+
 
 # Password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -60,10 +60,10 @@ async def login(user: UserCreate, db: Any = Depends(get_db)):
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    # access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user_in_db["email"]}, 
-        expires_delta=access_token_expires,
+        data={"sub": user_in_db["email"]}
+        # expires_delta=access_token_expires,
     )
     return {
         "access_token": access_token,

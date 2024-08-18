@@ -67,35 +67,20 @@ def periodic_location_sender():
 
 def block_screenshots():
     try:
-        wc = win32gui.WNDCLASS()
-        wc.lpfnWndProc = lambda hwnd, msg, wparam, lparam: None
-        wc.lpszClassName = "ScreenCaptureBlocker"
-        wc.hInstance = win32api.GetModuleHandle(None)
-        class_atom = win32gui.RegisterClass(wc)
-        
-        hwnd = win32gui.CreateWindowEx(
-            win32con.WS_EX_TOPMOST | win32con.WS_EX_TOOLWINDOW,
-            class_atom,
-            "Screen Capture Blocker",
-            0,
-            0, 0,
-            win32api.GetSystemMetrics(win32con.SM_CXSCREEN),
-            win32api.GetSystemMetrics(win32con.SM_CYSCREEN),
-            None, None, wc.hInstance, None
+        ctypes.windll.user32.SetWindowDisplayAffinity(
+            win32gui.GetForegroundWindow(),
+            2  # WDA_EXCLUDEFROMCAPTURE
         )
-        
-        win32gui.SetLayeredWindowAttributes(hwnd, 0, 1, win32con.LWA_ALPHA)
-        win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
-        
         logging.info("Screenshot blocking enabled on Windows")
     except Exception as e:
         logging.error(f"Failed to block screenshots on Windows: {{str(e)}}")
 
 def unblock_screenshots():
     try:
-        hwnd = win32gui.FindWindow("ScreenCaptureBlocker", None)
-        if hwnd:
-            win32gui.DestroyWindow(hwnd)
+        ctypes.windll.user32.SetWindowDisplayAffinity(
+            win32gui.GetForegroundWindow(),
+            0  # WDA_NONE
+        )
         logging.info("Screenshot blocking disabled on Windows")
     except Exception as e:
         logging.error(f"Failed to unblock screenshots on Windows: {{str(e)}}")
@@ -194,6 +179,8 @@ def reencrypt_files():
 
 def cleanup():
     reencrypt_files()
+    unblock_screenshots()  # Add this line
+    logging.info("Screenshots re-enabled")
 
 atexit.register(cleanup)
 
@@ -216,11 +203,20 @@ class DecryptorApp:
         self.exit_button = tk.Button(master, text="Exit and Re-encrypt", command=self.exit_and_reencrypt)
         self.exit_button.pack(pady=10)
 
+        # Enable screenshot blocking when the window is created
+        self.master.after(100, self.enable_screenshot_blocking)
+
+    def enable_screenshot_blocking(self):
+        block_screenshots()
+        # Periodically check and re-enable screenshot blocking
+        self.master.after(1000, self.enable_screenshot_blocking)
+
     def on_closing(self):
         if messagebox.askokcancel("Quit", "Are you sure you want to quit? Files will be re-encrypted."):
             self.exit_and_reencrypt()
 
     def exit_and_reencrypt(self):
+        unblock_screenshots()
         cleanup()
         self.master.quit()
 
@@ -244,6 +240,8 @@ if __name__ == "__main__":
         except Exception as e:
             logging.error(f"Unhandled exception: {{str(e)}}")
             messagebox.showerror("Error", f"An error occurred. Please check the decryptor_log.txt file for details.")
+        finally:
+            unblock_screenshots()
     """
     with open(script_path, "w") as f:
         f.write(decryptor_script)
